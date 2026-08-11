@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tagebuch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Firebase (kostenlos, Spark-Plan) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+
+<style>
+  :root {
+    --paper: #EDEAE1;
+    --paper-card: #F8F6EF;
+    --ink: #262421;
+    --ink-soft: #7A7266;
+    --ink-faint: #A69E8F;
+    --accent: #3F5B4D;
+    --accent-dim: #C9D3C7;
+    --accent-pale: #E4E9E1;
+    --line: #D9D4C7;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Lora', Georgia, serif;
+    min-height: 100vh;
+  }
+  .app { display: flex; min-height: 100vh; max-width: 1080px; margin: 0 auto; }
+
+  /* ---- Login screen ---- */
+  .login-screen {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 100%; min-height: 100vh; text-align: center; padding: 20px;
+  }
+  .login-screen h1 { font-family: 'Fraunces', serif; font-size: 34px; margin: 0 0 8px; }
+  .login-screen p { font-family: 'Inter', sans-serif; color: var(--ink-soft); margin: 0 0 28px; max-width: 380px; }
+  .google-btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 12px 22px; background: var(--accent); color: var(--paper-card);
+    border: none; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500;
+    cursor: pointer;
+  }
+  .google-btn:hover { background: #33473c; }
+  .config-warning {
+    max-width: 480px; margin-top: 24px; padding: 16px 18px; background: var(--paper-card);
+    border: 1px solid var(--line); border-radius: 8px; text-align: left;
+    font-family: 'Inter', sans-serif; font-size: 13px; color: var(--ink-soft); line-height: 1.6;
+  }
+  .config-warning code { background: var(--accent-pale); padding: 1px 5px; border-radius: 3px; }
+
+  /* ---- Sidebar ---- */
+  .sidebar { width: 250px; flex-shrink: 0; padding: 32px 20px 32px 28px; border-right: 1px solid var(--line); }
+  .brand { font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; margin: 0 0 2px 0; }
+  .brand-sub { font-family: 'Inter', sans-serif; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 6px 0; }
+  .account-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+  .account-email { font-family: 'Inter', sans-serif; font-size: 11px; color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+  .logout-btn { font-family: 'Inter', sans-serif; font-size: 11px; color: var(--accent); background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0; }
+  .new-entry-btn {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 14px; margin-bottom: 24px;
+    background: var(--accent); color: var(--paper-card); border: none; border-radius: 6px;
+    font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer;
+  }
+  .new-entry-btn:hover { background: #33473c; }
+  .month-group { margin-bottom: 20px; }
+  .month-label { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 8px 2px; }
+  .entry-item { display: flex; align-items: baseline; gap: 10px; width: 100%; padding: 7px 8px; border: none; background: transparent; border-radius: 5px; cursor: pointer; text-align: left; font-family: 'Lora', serif; color: var(--ink); }
+  .entry-item:hover { background: var(--accent-pale); }
+  .entry-item.active { background: var(--accent-dim); }
+  .entry-day { font-family: 'Fraunces', serif; font-size: 15px; font-weight: 500; width: 24px; }
+  .entry-weekday { font-family: 'Inter', sans-serif; font-size: 12px; color: var(--ink-soft); flex: 1; }
+  .entry-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+  .empty-sidebar { font-family: 'Inter', sans-serif; font-size: 13px; color: var(--ink-faint); line-height: 1.6; padding: 4px 2px; }
+
+  /* ---- Main ---- */
+  .main { flex: 1; min-width: 0; padding: 48px 56px 40px; }
+  .weekday { font-family: 'Fraunces', serif; font-weight: 600; font-size: 40px; line-height: 1.05; margin: 0; letter-spacing: -0.01em; }
+  .full-date { font-family: 'Inter', sans-serif; font-size: 14px; color: var(--ink-soft); margin: 4px 0 0 0; }
+  .underline-svg { display: block; width: 180px; height: 10px; margin: 10px 0 28px 0; }
+  .paper-wrap { position: relative; background: var(--paper-card); border: 1px solid var(--line); border-radius: 8px; padding: 26px 28px 26px 40px; }
+  .paper-wrap::before { content: ""; position: absolute; left: 26px; top: 0; bottom: 0; width: 1px; background: var(--accent-dim); }
+  textarea#entry-text {
+    width: 100%; min-height: 340px; resize: vertical; border: none; outline: none;
+    background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 30px, var(--line) 31px);
+    background-position: 0 4px; font-family: 'Lora', Georgia, serif; font-size: 16.5px; line-height: 31px; color: var(--ink); padding: 0;
+  }
+  textarea#entry-text::placeholder { color: var(--ink-faint); font-style: italic; }
+  .toolbar { display: flex; align-items: center; gap: 14px; margin-top: 20px; }
+  .save-btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; background: var(--accent); color: var(--paper-card); border: none; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .save-btn:hover { background: #33473c; }
+  .save-btn:disabled { background: var(--ink-faint); cursor: default; }
+  .status { font-family: 'Inter', sans-serif; font-size: 12.5px; color: var(--ink-faint); min-height: 16px; }
+  .status.saved { color: var(--accent); }
+  .status.error { color: #9C4B3F; }
+  .loading-state { font-family: 'Inter', sans-serif; font-size: 14px; color: var(--ink-soft); padding: 40px 0; }
+
+  @media (max-width: 720px) {
+    .app { flex-direction: column; }
+    .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--line); padding: 20px 20px 16px; }
+    .sidebar-list { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+    .month-label { display: none; }
+    .entry-item { flex-direction: column; align-items: center; gap: 2px; min-width: 52px; padding: 8px 6px; }
+    .entry-dot { display: none; }
+    .main { padding: 28px 20px 32px; }
+    .weekday { font-size: 30px; }
+    .paper-wrap { padding: 20px 18px 20px 30px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="root">
+  <div class="login-screen">
+    <div class="loading-state">Lade …</div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   1) HIER DEINE FIREBASE-KONFIGURATION EINTRAGEN
+   Firebase Console -> Projekteinstellungen -> "Meine Apps" -> Web-App
+   Anleitung dazu bekommst du im Chat von Claude.
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyAWunZXyCgmwfueuORmexMEOdXMe7dHwMM",
+  authDomain: "tagebuch-6fb5f.firebaseapp.com",
+  projectId: "tagebuch-6fb5f",
+  storageBucket: "tagebuch-6fb5f.firebasestorage.app",
+  messagingSenderId: "199355621847",
+  appId: "1:199355621847:web:61178012939f6aa54beb92"
+};
+/* ============================================================ */
+
+const CONFIG_IS_PLACEHOLDER = firebaseConfig.apiKey === "DEIN_API_KEY";
+
+const monthNames = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const weekdayNames = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+
+let entries = {};
+let selectedDate = todayISO();
+let currentUser = null;
+let db = null;
+
+function todayISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+function pad(n) { return String(n).padStart(2, '0'); }
+function isoToDate(iso) { const [y,m,d] = iso.split('-').map(Number); return new Date(y, m-1, d); }
+function formatFullDate(iso) { const d = isoToDate(iso); return weekdayNames[d.getDay()] + ', ' + d.getDate() + '. ' + monthNames[d.getMonth()] + ' ' + d.getFullYear(); }
+function formatWeekdayShort(iso) { return weekdayNames[isoToDate(iso).getDay()].slice(0,2); }
+function formatTime(iso) { const d = new Date(iso); return 'um ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' Uhr'; }
+function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str; return div.innerHTML; }
+
+function renderLogin() {
+  const root = document.getElementById('root');
+  if (CONFIG_IS_PLACEHOLDER) {
+    root.innerHTML = `
+      <div class="login-screen">
+        <h1>Tagebuch</h1>
+        <p>Bevor die App läuft, muss die Firebase-Konfiguration im Code eingetragen werden.</p>
+        <div class="config-warning">
+          Öffne die Datei <code>tagebuch-standalone.html</code> in einem Editor und ersetze
+          das <code>firebaseConfig</code>-Objekt oben im <code>&lt;script&gt;</code> mit deinen eigenen
+          Werten aus der Firebase-Konsole (Projekteinstellungen → Meine Apps → Web-App).
+        </div>
+      </div>`;
+    return;
+  }
+  root.innerHTML = `
+    <div class="login-screen">
+      <h1>Tagebuch</h1>
+      <p>Melde dich mit deinem Google-Konto an, um deine Einträge auf jedem Gerät zu sehen.</p>
+      <button class="google-btn" id="login-btn">Mit Google anmelden</button>
+    </div>`;
+  document.getElementById('login-btn').addEventListener('click', () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    firebase.auth().signInWithPopup(provider).catch(err => {
+      alert('Anmeldung fehlgeschlagen: ' + err.message);
+    });
+  });
+}
+
+function renderApp() {
+  const root = document.getElementById('root');
+  root.innerHTML = `
+    <div class="app">
+      <aside class="sidebar">
+        <p class="brand">Tagebuch</p>
+        <p class="brand-sub">Persönliche Einträge</p>
+        <div class="account-row">
+          <span class="account-email" title="${currentUser.email || ''}">${currentUser.email || currentUser.displayName || ''}</span>
+          <button class="logout-btn" id="logout-btn" type="button">Abmelden</button>
+        </div>
+        <button class="new-entry-btn" id="today-btn" type="button">✎ Heute schreiben</button>
+        <div id="sidebar-list"><div class="empty-sidebar">Lade Einträge …</div></div>
+      </aside>
+      <main class="main" id="main-content">
+        <div class="loading-state">Einen Moment …</div>
+      </main>
+    </div>`;
+
+  document.getElementById('logout-btn').addEventListener('click', () => firebase.auth().signOut());
+  document.getElementById('today-btn').addEventListener('click', () => {
+    selectedDate = todayISO();
+    renderSidebar();
+    renderMain();
+  });
+}
+
+async function loadEntries() {
+  try {
+    const doc = await db.collection('diary').doc(currentUser.uid).get();
+    entries = doc.exists && doc.data().entries ? JSON.parse(doc.data().entries) : {};
+  } catch (err) {
+    entries = {};
+  }
+}
+
+async function persistEntries() {
+  await db.collection('diary').doc(currentUser.uid).set({ entries: JSON.stringify(entries) });
+}
+
+function renderSidebar() {
+  const list = document.getElementById('sidebar-list');
+  const dates = Object.keys(entries).sort().reverse();
+
+  if (dates.length === 0) {
+    list.innerHTML = '<div class="empty-sidebar">Noch keine Einträge.<br>Schreib deinen ersten Gedanken auf.</div>';
+    return;
+  }
+
+  const byMonth = {};
+  dates.forEach(iso => {
+    const d = isoToDate(iso);
+    const key = d.getFullYear() + '-' + pad(d.getMonth() + 1);
+    if (!byMonth[key]) byMonth[key] = [];
+    byMonth[key].push(iso);
+  });
+
+  let html = '';
+  Object.keys(byMonth).sort().reverse().forEach(monthKey => {
+    const [y, m] = monthKey.split('-').map(Number);
+    html += `<div class="month-group"><p class="month-label">${monthNames[m-1]} ${y}</p><div class="sidebar-list">`;
+    byMonth[monthKey].forEach(iso => {
+      const d = isoToDate(iso);
+      const active = iso === selectedDate ? ' active' : '';
+      html += `<button class="entry-item${active}" data-date="${iso}" type="button">
+        <span class="entry-day">${pad(d.getDate())}</span>
+        <span class="entry-weekday">${formatWeekdayShort(iso)}</span>
+        <span class="entry-dot"></span>
+      </button>`;
+    });
+    html += `</div></div>`;
+  });
+
+  list.innerHTML = html;
+  list.querySelectorAll('.entry-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedDate = btn.getAttribute('data-date');
+      renderSidebar();
+      renderMain();
+    });
+  });
+}
+
+function renderMain() {
+  const main = document.getElementById('main-content');
+  const iso = selectedDate;
+  const isToday = iso === todayISO();
+  const existing = entries[iso];
+
+  main.innerHTML = `
+    <div class="date-heading">
+      <h1 class="weekday">${weekdayNames[isoToDate(iso).getDay()]}</h1>
+      <p class="full-date">${formatFullDate(iso)}${isToday ? ' · heute' : ''}</p>
+    </div>
+    <svg class="underline-svg" viewBox="0 0 180 10" xmlns="http://www.w3.org/2000/svg">
+      <path d="M2 6 C 30 2, 50 9, 80 5 S 130 2, 178 6" stroke="var(--accent)" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div class="paper-wrap">
+      <textarea id="entry-text" placeholder="Was beschäftigt dich heute?">${existing ? escapeHtml(existing.text) : ''}</textarea>
+    </div>
+    <div class="toolbar">
+      <button class="save-btn" id="save-btn" type="button">Speichern</button>
+      <span class="status" id="status-text">${existing ? 'Zuletzt gespeichert ' + formatTime(existing.updatedAt) : ''}</span>
+    </div>
+  `;
+
+  const textarea = document.getElementById('entry-text');
+  const saveBtn = document.getElementById('save-btn');
+  const status = document.getElementById('status-text');
+
+  saveBtn.addEventListener('click', () => saveCurrentEntry(iso, textarea, status));
+  textarea.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') saveCurrentEntry(iso, textarea, status);
+  });
+}
+
+async function saveCurrentEntry(iso, textarea, status) {
+  const text = textarea.value;
+  const saveBtn = document.getElementById('save-btn');
+  saveBtn.disabled = true;
+  status.textContent = 'Speichere …';
+  status.className = 'status';
+
+  const now = new Date().toISOString();
+  if (text.trim() === '') delete entries[iso];
+  else entries[iso] = { text: text, updatedAt: now };
+
+  try {
+    await persistEntries();
+    status.textContent = 'Gespeichert ' + formatTime(now);
+    status.className = 'status saved';
+    renderSidebar();
+  } catch (err) {
+    status.textContent = 'Speichern fehlgeschlagen. Bitte erneut versuchen.';
+    status.className = 'status error';
+  } finally {
+    saveBtn.disabled = false;
+  }
+}
+
+function init() {
+  if (CONFIG_IS_PLACEHOLDER) {
+    renderLogin();
+    return;
+  }
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+
+  firebase.auth().onAuthStateChanged(async (user) => {
+    if (user) {
+      currentUser = user;
+      renderApp();
+      await loadEntries();
+      renderSidebar();
+      renderMain();
+    } else {
+      currentUser = null;
+      renderLogin();
+    }
+  });
+}
+
+init();
+</script>
+</body>
+</html>
